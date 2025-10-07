@@ -1,0 +1,116 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/mobility-module.h"
+#include "ns3/aodv-module.h"
+#include "ns3/applications-module.h"
+#include "ns3/netanim-module.h"
+
+#include <fstream>
+#include <iostream>
+
+using namespace ns3;
+
+std::ofstream outFile;
+
+void TxTrace (std::string context, Ptr<const Packet> p) {
+  outFile << Simulator::Now().GetSeconds() << ",Tx," << p->GetSize() << std::endl;
+}
+
+void RxTrace (std::string context, Ptr<const Packet> p, const Address &addr) {
+  outFile << Simulator::Now().GetSeconds() << ",Rx," << p->GetSize() << std::endl;
+}
+
+int main (int argc, char *argv[]) {
+  outFile.open ("packets_aodv.csv");
+  outFile << "Time,Type,Size" << std::endl;
+
+  NodeContainer nodes;
+  nodes.Create (4);
+
+  PointToPointHelper p2p;
+  p2p.SetDeviceAttribute ("DataRate", StringValue ("1Mbps"));
+  p2p.SetChannelAttribute ("Delay", StringValue ("10ms"));
+
+  NetDeviceContainer d01 = p2p.Install (nodes.Get(0), nodes.Get(1));
+  NetDeviceContainer d12 = p2p.Install (nodes.Get(1), nodes.Get(2));
+  NetDeviceContainer d23 = p2p.Install (nodes.Get(2), nodes.Get(3));
+
+  InternetStackHelper internet;
+  AodvHelper aodv;
+  Ipv4ListRoutingHelper list;
+  list.Add (aodv, 100);
+  internet.SetRoutingHelper (list);
+  internet.Install (nodes);
+
+  Ipv4AddressHelper ipv4;
+
+  ipv4.SetBase ("10.0.1.0", "255.255.255.0");
+  Ipv4InterfaceContainer i01 = ipv4.Assign (d01);
+
+  ipv4.SetBase ("10.0.2.0", "255.255.255.0");
+  Ipv4InterfaceContainer i12 = ipv4.Assign (d12);
+
+  ipv4.SetBase ("10.0.3.0", "255.255.255.0");
+  Ipv4InterfaceContainer i23 = ipv4.Assign (d23);
+
+  // Install application: client on node 0, sink on node 3
+  uint16_t port = 9;
+  Address remoteAddress = InetSocketAddress (i23.GetAddress(1), port);
+
+  OnOffHelper onoff ("ns3::UdpSocketFactory", remoteAddress);
+  onoff.SetConstantRate (DataRate ("500kbps"));
+  onoff.SetAttribute ("PacketSize", UintegerValue (1024));
+  ApplicationContainer clientApp = onoff.Install (nodes.Get (0));
+  clientApp.Start (Seconds (1.0));
+  clientApp.Stop (Seconds (9.0));
+
+  PacketSinkHelper sink ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), port));
+  ApplicationContainer sinkApp = sink.Install (nodes.Get (3));
+  sinkApp.Start (Seconds (0.0));
+  sinkApp.Stop (Seconds (10.0));
+
+  Config::Connect ("/NodeList/*/ApplicationList/*/$ns3::OnOffApplication/Tx", MakeCallback (&TxTrace));
+  Config::Connect ("/NodeList/*/ApplicationList/*/$ns3::PacketSink/Rx", MakeCallback (&RxTrace));
+
+  // ----------------- NetAnim Visualization -----------------
+  AnimationInterface anim ("my_aodv.xml");
+
+  // Spread nodes so they don’t overlap
+  anim.SetConstantPosition (nodes.Get (0), 10, 50);
+  anim.SetConstantPosition (nodes.Get (1), 40, 70);
+  anim.SetConstantPosition (nodes.Get (2), 70, 50);
+  anim.SetConstantPosition (nodes.Get (3), 100, 30);
+
+  // Node descriptions + colors
+  anim.UpdateNodeDescription (nodes.Get(0), "Source");
+  anim.UpdateNodeColor (nodes.Get(0), 255, 0, 0);   // Red
+
+  anim.UpdateNodeDescription (nodes.Get(1), "Router1");
+  anim.UpdateNodeColor (nodes.Get(1), 0, 200, 0);   // Dark Green
+
+  anim.UpdateNodeDescription (nodes.Get(2), "Router2");
+  anim.UpdateNodeColor (nodes.Get(2), 0, 0, 200);   // Dark Blue
+
+  anim.UpdateNodeDescription (nodes.Get(3), "Sink");
+  anim.UpdateNodeColor (nodes.Get(3), 200, 200, 0); // Yellow
+
+  // Links
+  anim.UpdateLinkDescription (0, 1, "Link_01");
+  anim.UpdateLinkDescription (1, 2, "Link_12");
+  anim.UpdateLinkDescription (2, 3, "Link_23");
+
+  // Make nodes medium sized (not too big)
+  anim.UpdateNodeSize (nodes.Get(0)->GetId(), 20, 20);
+  anim.UpdateNodeSize (nodes.Get(1)->GetId(), 18, 18);
+  anim.UpdateNodeSize (nodes.Get(2)->GetId(), 18, 18);
+  anim.UpdateNodeSize (nodes.Get(3)->GetId(), 20, 20);
+  // ---------------------------------------------------------
+
+  Simulator::Stop (Seconds (10.0));
+  Simulator::Run ();
+  Simulator::Destroy ();
+  outFile.close ();
+  return 0;
+}

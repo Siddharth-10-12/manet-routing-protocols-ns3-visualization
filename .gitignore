@@ -1,0 +1,16 @@
+# Ignore build and temporary files
+build/
+ns3env/
+*.o
+*.so
+*.log
+*.tmp
+*.pcap
+*.obj
+*.csv~
+*.xml~
+*.pyc
+*.pyo
+__pycache__/
+# Ignore NS3 compiled binaries
+ns3/
