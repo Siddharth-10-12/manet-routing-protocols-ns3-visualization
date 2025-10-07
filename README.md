@@ -9,7 +9,7 @@
 This project focuses on simulating and visualizing the performance of Mobile Ad Hoc Network (MANET) routing protocols using NS-3 (Network Simulator 3).
 It integrates both network-level performance analysis and visual insights through Python-based data visualization and NS-3’s NetAnim tool.
 
- Objectives:
+** Objectives:**
 
 Simulate and compare the behavior of AODV, DSDV, DSR, and OLSR protocols
 
